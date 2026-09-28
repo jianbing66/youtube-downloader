@@ -19,7 +19,7 @@ class YouTubeDownloader:
         self.root = root
         self.root.title("YouTube 视频下载器")
         self.root.geometry("800x550")
-        self.resizable(False, False)
+        self.root.resizable(False, False)
 
         self.url_var = tk.StringVar()
         self.output_dir_var = tk.StringVar(
