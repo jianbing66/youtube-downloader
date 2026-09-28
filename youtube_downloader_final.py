@@ -10,7 +10,7 @@ try:
     import yt_dlp
 except ImportError:
     messagebox.showerror("错误", "缺少 yt-dlp 模块，正在安装...")
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "yt-dlp"])
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "--upgrade", "yt-dlp"])
     import yt_dlp
 
 
@@ -18,14 +18,8 @@ class YouTubeDownloader:
     def __init__(self, root):
         self.root = root
         self.root.title("YouTube 视频下载器")
-        self.root.geometry("800x500")
-        self.root.resizable(False, False)
-        
-        # 设置窗口图标（可选）
-        try:
-            self.root.iconbitmap(default='')
-        except:
-            pass
+        self.root.geometry("800x550")
+        self.resizable(False, False)
 
         self.url_var = tk.StringVar()
         self.output_dir_var = tk.StringVar(
@@ -83,7 +77,7 @@ class YouTubeDownloader:
         )
         self.quality_combo = ttk.Combobox(
             main_frame, textvariable=self.quality_var,
-            values=["best[ext=mp4]", "bestvideo+bestaudio", "best"],
+            values=["best[ext=mp4]", "bestvideo+bestaudio", "best", "1080", "720"],
             state="readonly", width=30
         )
         self.quality_combo.grid(row=4, column=1, sticky="w", pady=(0, 10))
@@ -168,8 +162,17 @@ class YouTubeDownloader:
             else:
                 self.download_video(url, output_dir)
         except Exception as exc:
-            self.status_var.set(f"❌ 下载失败：{str(exc)[:100]}")
-            messagebox.showerror("下载失败", f"错误详情：\n{str(exc)}")
+            error_msg = str(exc)
+            if "Sign in to confirm" in error_msg or "bot" in error_msg:
+                self.status_var.set("⚠️ YouTube 反爬虫验证，请升级 yt-dlp")
+                messagebox.showerror("下载失败", 
+                    "YouTube 需要验证。\n\n解决方案：\n"
+                    "1. 打开 PowerShell\n"
+                    "2. 运行：pip install --upgrade yt-dlp\n"
+                    "3. 重试下载")
+            else:
+                self.status_var.set(f"❌ 下载失败：{error_msg[:80]}")
+                messagebox.showerror("下载失败", f"错误：\n{error_msg}")
             self.progress["value"] = 0
         else:
             self.status_var.set("✓ 下载完成！")
@@ -185,6 +188,7 @@ class YouTubeDownloader:
             "nocheckcertificate": True,
             "quiet": False,
             "no_warnings": False,
+            "socket_timeout": 30,
             "progress_hooks": [self.progress_hook],
         }
         with yt_dlp.YoutubeDL(opts) as ydl:
@@ -198,6 +202,7 @@ class YouTubeDownloader:
             "nocheckcertificate": True,
             "quiet": False,
             "no_warnings": False,
+            "socket_timeout": 30,
             "progress_hooks": [self.progress_hook],
             "postprocessors": [
                 {
