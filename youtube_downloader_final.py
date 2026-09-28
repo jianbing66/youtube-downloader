@@ -6,28 +6,34 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 from pathlib import Path
 
-try:
-    import yt_dlp
-except ImportError:
-    messagebox.showerror("错误", "缺少 yt-dlp 模块，正在安装...")
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "--upgrade", "yt-dlp"])
-    import yt_dlp
+# 自动安装依赖
+def ensure_dependencies():
+    required = ['pytube']
+    for package in required:
+        try:
+            __import__(package)
+        except ImportError:
+            messagebox.showinfo("提示", f"正在安装 {package}...")
+            subprocess.check_call([sys.executable, "-m", "pip", "install", package, "-q"])
+
+ensure_dependencies()
+
+from pytube import YouTube
+from pytube.exceptions import PytubeError
 
 
 class YouTubeDownloader:
     def __init__(self, root):
         self.root = root
-        self.root.title("YouTube 视频下载器")
-        self.root.geometry("800x550")
+        self.root.title("YouTube 视频下载器 v2.0")
+        self.root.geometry("900x600")
         self.root.resizable(False, False)
 
         self.url_var = tk.StringVar()
         self.output_dir_var = tk.StringVar(
             value=str(Path.home() / "Downloads" / "YouTube视频")
         )
-        self.mode_var = tk.StringVar(value="video")
-        self.quality_var = tk.StringVar(value="best[ext=mp4]")
-        self.audio_format_var = tk.StringVar(value="mp3")
+        self.quality_var = tk.StringVar(value="最高质量")
 
         self.build_ui()
 
@@ -38,95 +44,93 @@ class YouTubeDownloader:
 
         # 标题
         title_label = ttk.Label(
-            main_frame, text="YouTube 视频下载器", 
-            font=("Microsoft YaHei", 14, "bold")
+            main_frame, 
+            text="🎬 YouTube 视频下载器 v2.0", 
+            font=("Microsoft YaHei", 16, "bold")
         )
         title_label.grid(row=0, column=0, columnspan=3, pady=(0, 20))
 
+        # 说明文字
+        info_label = ttk.Label(
+            main_frame,
+            text="支持视频下载 | 完全中文界面 | 简单易用",
+            font=("Microsoft YaHei", 10),
+            foreground="gray"
+        )
+        info_label.grid(row=1, column=0, columnspan=3, pady=(0, 15))
+
         # 视频链接
-        ttk.Label(main_frame, text="YouTube 链接：", font=("Microsoft YaHei", 10)).grid(
-            row=1, column=0, sticky="w", pady=(0, 10)
+        ttk.Label(main_frame, text="YouTube 链接：", font=("Microsoft YaHei", 11, "bold")).grid(
+            row=2, column=0, sticky="w", pady=(0, 5)
         )
-        url_entry = ttk.Entry(main_frame, textvariable=self.url_var, width=80)
-        url_entry.grid(row=1, column=1, columnspan=2, sticky="ew", pady=(0, 10))
-
-        # 保存路径
-        ttk.Label(main_frame, text="保存位置：", font=("Microsoft YaHei", 10)).grid(
-            row=2, column=0, sticky="w", pady=(0, 10)
-        )
-        path_entry = ttk.Entry(main_frame, textvariable=self.output_dir_var, width=60)
-        path_entry.grid(row=2, column=1, sticky="ew", pady=(0, 10))
-        ttk.Button(main_frame, text="浏览", command=self.choose_directory, width=8).grid(
-            row=2, column=2, sticky="ew", padx=(10, 0), pady=(0, 10)
+        ttk.Entry(main_frame, textvariable=self.url_var, width=90, font=("Microsoft YaHei", 10)).grid(
+            row=2, column=1, columnspan=2, sticky="ew", pady=(0, 15)
         )
 
-        # 下载类型选择
-        ttk.Label(main_frame, text="下载类型：", font=("Microsoft YaHei", 10)).grid(
-            row=3, column=0, sticky="w", pady=(0, 10)
+        # 保存位置
+        ttk.Label(main_frame, text="保存位置：", font=("Microsoft YaHei", 11, "bold")).grid(
+            row=3, column=0, sticky="w", pady=(0, 5)
         )
-        mode_frame = ttk.Frame(main_frame)
-        mode_frame.grid(row=3, column=1, sticky="w", pady=(0, 10))
-        ttk.Radiobutton(mode_frame, text="视频 (MP4)", variable=self.mode_var, 
-                       value="video", command=self.update_options).pack(side="left", padx=5)
-        ttk.Radiobutton(mode_frame, text="音频 (MP3)", variable=self.mode_var, 
-                       value="audio", command=self.update_options).pack(side="left", padx=5)
+        ttk.Entry(main_frame, textvariable=self.output_dir_var, width=70, font=("Microsoft YaHei", 10)).grid(
+            row=3, column=1, sticky="ew", pady=(0, 15)
+        )
+        ttk.Button(main_frame, text="📁 浏览", command=self.choose_directory, width=10).grid(
+            row=3, column=2, sticky="ew", padx=(10, 0), pady=(0, 15)
+        )
 
-        # 视频质量选择
-        ttk.Label(main_frame, text="视频质量：", font=("Microsoft YaHei", 10)).grid(
-            row=4, column=0, sticky="w", pady=(0, 10)
+        # 质量选择
+        ttk.Label(main_frame, text="下载质量：", font=("Microsoft YaHei", 11, "bold")).grid(
+            row=4, column=0, sticky="w", pady=(0, 5)
         )
         self.quality_combo = ttk.Combobox(
-            main_frame, textvariable=self.quality_var,
-            values=["best[ext=mp4]", "bestvideo+bestaudio", "best", "1080", "720"],
-            state="readonly", width=30
+            main_frame, 
+            textvariable=self.quality_var,
+            values=["最高质量 (1080p+)", "高质量 (720p)", "中等质量 (480p)", "低质量 (360p)"],
+            state="readonly", 
+            width=40,
+            font=("Microsoft YaHei", 10)
         )
-        self.quality_combo.grid(row=4, column=1, sticky="w", pady=(0, 10))
-
-        # 音频格式选择
-        ttk.Label(main_frame, text="音频格式：", font=("Microsoft YaHei", 10)).grid(
-            row=5, column=0, sticky="w", pady=(0, 10)
-        )
-        self.audio_combo = ttk.Combobox(
-            main_frame, textvariable=self.audio_format_var,
-            values=["mp3", "wav", "m4a", "aac"],
-            state="readonly", width=30
-        )
-        self.audio_combo.grid(row=5, column=1, sticky="w", pady=(0, 10))
+        self.quality_combo.grid(row=4, column=1, sticky="w", pady=(0, 20))
 
         # 下载按钮
         download_btn = ttk.Button(
-            main_frame, text="开始下载", command=self.start_download
+            main_frame, 
+            text="⬇️ 开始下载", 
+            command=self.start_download,
+            width=30
         )
-        download_btn.grid(row=6, column=0, columnspan=3, pady=(20, 10), sticky="ew")
+        download_btn.grid(row=5, column=0, columnspan=3, pady=(0, 15), sticky="ew")
 
         # 进度条
         self.progress = ttk.Progressbar(
-            main_frame, orient="horizontal", mode="determinate", length=600
+            main_frame, 
+            orient="horizontal", 
+            mode="determinate",
+            length=800
         )
-        self.progress.grid(row=7, column=0, columnspan=3, sticky="ew", pady=(0, 10))
+        self.progress.grid(row=6, column=0, columnspan=3, sticky="ew", pady=(0, 10))
 
-        # 进度百分比标签
-        self.percent_label = ttk.Label(main_frame, text="0%", font=("Microsoft YaHei", 9))
-        self.percent_label.grid(row=8, column=0, columnspan=3, sticky="w", pady=(0, 10))
+        # 进度百分比
+        self.percent_label = ttk.Label(
+            main_frame, 
+            text="0%", 
+            font=("Microsoft YaHei", 10, "bold")
+        )
+        self.percent_label.grid(row=7, column=0, columnspan=3, sticky="w", pady=(0, 10))
 
         # 状态信息
-        self.status_var = tk.StringVar(value="就绪")
+        self.status_var = tk.StringVar(value="✓ 就绪，请输入 YouTube 链接")
         status_label = ttk.Label(
-            main_frame, textvariable=self.status_var, wraplength=700,
-            justify="left", font=("Microsoft YaHei", 9)
+            main_frame, 
+            textvariable=self.status_var, 
+            wraplength=800,
+            justify="left", 
+            font=("Microsoft YaHei", 10),
+            foreground="blue"
         )
-        status_label.grid(row=9, column=0, columnspan=3, sticky="ew", pady=(0, 0))
+        status_label.grid(row=8, column=0, columnspan=3, sticky="ew", pady=(0, 0))
 
         main_frame.columnconfigure(1, weight=1)
-
-    def update_options(self):
-        """根据下载类型更新选项"""
-        if self.mode_var.get() == "audio":
-            self.quality_combo.config(state="disabled")
-            self.audio_combo.config(state="readonly")
-        else:
-            self.quality_combo.config(state="readonly")
-            self.audio_combo.config(state="disabled")
 
     def choose_directory(self):
         folder = filedialog.askdirectory(title="选择保存目录")
@@ -140,7 +144,7 @@ class YouTubeDownloader:
             return
 
         if not url.startswith(("http://", "https://")):
-            url = "https://" + url
+            url = "https://www.youtube.com/watch?v=" + url
             self.url_var.set(url)
 
         output_dir = self.output_dir_var.get().strip()
@@ -149,89 +153,99 @@ class YouTubeDownloader:
             return
 
         os.makedirs(output_dir, exist_ok=True)
-        threading.Thread(target=self.download_task, args=(url, output_dir), daemon=True).start()
+        threading.Thread(
+            target=self.download_task, 
+            args=(url, output_dir), 
+            daemon=True
+        ).start()
+
+    def get_quality_filter(self):
+        quality = self.quality_var.get()
+        if "1080" in quality:
+            return 1080
+        elif "720" in quality:
+            return 720
+        elif "480" in quality:
+            return 480
+        else:
+            return 360
 
     def download_task(self, url, output_dir):
-        self.status_var.set("正在处理中...")
+        self.status_var.set("⏳ 正在解析视频信息...")
         self.progress["value"] = 0
         self.percent_label.config(text="0%")
 
         try:
-            if self.mode_var.get() == "audio":
-                self.download_audio(url, output_dir)
-            else:
-                self.download_video(url, output_dir)
-        except Exception as exc:
-            error_msg = str(exc)
-            if "Sign in to confirm" in error_msg or "bot" in error_msg:
-                self.status_var.set("⚠️ YouTube 反爬虫验证，请升级 yt-dlp")
-                messagebox.showerror("下载失败", 
-                    "YouTube 需要验证。\n\n解决方案：\n"
-                    "1. 打开 PowerShell\n"
-                    "2. 运行：pip install --upgrade yt-dlp\n"
-                    "3. 重试下载")
-            else:
-                self.status_var.set(f"❌ 下载失败：{error_msg[:80]}")
-                messagebox.showerror("下载失败", f"错误：\n{error_msg}")
-            self.progress["value"] = 0
-        else:
-            self.status_var.set("✓ 下载完成！")
+            # 创建 YouTube 对象
+            self.status_var.set("⏳ 连接到 YouTube...")
+            yt = YouTube(url)
+
+            self.status_var.set(f"📺 标题：{yt.title}")
+            self.progress["value"] = 20
+            self.percent_label.config(text="20%")
+
+            # 获取流
+            quality_filter = self.get_quality_filter()
+            streams = yt.streams.filter(
+                progressive=True,  # 包含视频和音频
+                file_extension='mp4'
+            ).order_by('resolution')
+
+            if not streams:
+                self.status_var.set("⚠️ 无可用流，尝试其他方式...")
+                streams = yt.streams.order_by('resolution')
+
+            # 选择最接近的质量
+            best_stream = None
+            for stream in streams:
+                if stream.resolution:
+                    res = int(stream.resolution.rstrip('p'))
+                    if res <= quality_filter:
+                        best_stream = stream
+                    else:
+                        break
+
+            if not best_stream:
+                best_stream = streams.last()
+
+            if not best_stream:
+                raise Exception("找不到可下载的视频流")
+
+            self.status_var.set(f"⬇️ 下载中... 分辨率: {best_stream.resolution or 'unknown'}")
+            self.progress["value"] = 40
+            self.percent_label.config(text="40%")
+
+            # 下载
+            filename = best_stream.download(
+                output_path=output_dir,
+                filename=f"{yt.title[:50]}.mp4"
+            )
+
+            self.progress["value"] = 90
+            self.percent_label.config(text="90%")
+            self.status_var.set("✓ 处理中...")
+
             self.progress["value"] = 100
             self.percent_label.config(text="100%")
-            messagebox.showinfo("成功", f"下载完成！\n保存位置：{output_dir}")
+            self.status_var.set("✅ 下载完成！")
+            messagebox.showinfo(
+                "成功", 
+                f"下载完成！\n\n文件名: {os.path.basename(filename)}\n\n保存位置: {output_dir}"
+            )
 
-    def download_video(self, url, output_dir):
-        opts = {
-            "format": self.quality_var.get(),
-            "outtmpl": os.path.join(output_dir, "%(title)s.%(ext)s"),
-            "noplaylist": False,
-            "nocheckcertificate": True,
-            "quiet": False,
-            "no_warnings": False,
-            "socket_timeout": 30,
-            "progress_hooks": [self.progress_hook],
-        }
-        with yt_dlp.YoutubeDL(opts) as ydl:
-            ydl.download([url])
+        except PytubeError as e:
+            error_msg = str(e)
+            self.status_var.set(f"❌ YouTube 错误")
+            messagebox.showerror("下载失败", f"YouTube 错误：\n{error_msg[:200]}")
+            self.progress["value"] = 0
+            self.percent_label.config(text="0%")
 
-    def download_audio(self, url, output_dir):
-        opts = {
-            "format": "bestaudio/best",
-            "outtmpl": os.path.join(output_dir, "%(title)s.%(ext)s"),
-            "noplaylist": False,
-            "nocheckcertificate": True,
-            "quiet": False,
-            "no_warnings": False,
-            "socket_timeout": 30,
-            "progress_hooks": [self.progress_hook],
-            "postprocessors": [
-                {
-                    "key": "FFmpegExtractAudio",
-                    "preferredcodec": self.audio_format_var.get(),
-                    "preferredquality": "192",
-                }
-            ],
-        }
-        with yt_dlp.YoutubeDL(opts) as ydl:
-            ydl.download([url])
-
-    def progress_hook(self, d):
-        if d["status"] == "downloading":
-            total_bytes = d.get("total_bytes") or d.get("total_bytes_estimate", 0)
-            downloaded = d.get("downloaded_bytes", 0)
-            if total_bytes > 0:
-                percent = (downloaded / total_bytes) * 100
-                self.progress["value"] = percent
-                self.percent_label.config(text=f"{percent:.1f}%")
-                
-                # 显示速度和时间
-                speed = d.get("_speed_str", "计算中...")
-                eta = d.get("_eta_str", "计算中...")
-                self.status_var.set(f"⬇️ 下载中... {percent:.1f}% | 速度：{speed} | 剩余时间：{eta}")
-        elif d["status"] == "finished":
-            self.status_var.set("处理中... 正在转换格式...")
-        elif d["status"] == "error":
-            self.status_var.set("⚠️ 发生错误")
+        except Exception as e:
+            error_msg = str(e)
+            self.status_var.set(f"❌ 错误：{error_msg[:50]}")
+            messagebox.showerror("下载失败", f"错误：\n{error_msg[:300]}")
+            self.progress["value"] = 0
+            self.percent_label.config(text="0%")
 
 
 def main():
