@@ -51,7 +51,7 @@ class SunoDownloader:
         # 标题
         title_label = ttk.Label(
             main_frame, 
-            text="🎵 Suno AI 歌曲下载器 - 完整版 v2.0", 
+            text="🎵 Suno AI 歌曲下载器 - 完整版 v3.0", 
             font=("Microsoft YaHei", 16, "bold"),
             foreground="#ff6b6b"
         )
@@ -82,7 +82,7 @@ class SunoDownloader:
         # 说明
         ttk.Label(
             main_frame,
-            text="💡 支持格式：https://suno.com/song/xxx 或直接输入歌曲 ID (任何格式的 ID)",
+            text="💡 支持格式：https://suno.com/song/xxx | https://suno.com/s/xxx | 或直接输入 ID",
             font=("Microsoft YaHei", 9),
             foreground="gray"
         ).grid(row=3, column=0, columnspan=3, sticky="w", pady=(0, 15))
@@ -219,25 +219,33 @@ class SunoDownloader:
         
         self.append_status(f"📍 尝试解析: {url_or_id[:100]}")
         
-        # 方法 1: 如果是完整 URL - 多种格式
-        if 'suno' in url_or_id.lower():
-            # 格式: https://suno.com/song/xxxxx
-            match = re.search(r'song[/\-=]([^\s/?&#]+)', url_or_id)
-            if match:
-                song_id = match.group(1)
-                self.append_status(f"✓ 从 URL 提取 ID: {song_id}")
-                return song_id
-            
-            # 格式: https://suno.com/c/xxxxx
-            match = re.search(r'/c/([^\s/?&#]+)', url_or_id)
-            if match:
-                song_id = match.group(1)
-                self.append_status(f"✓ 从 URL 提取 ID: {song_id}")
-                return song_id
+        # 移除查询参数 (如 ?time=73)
+        url_or_id = url_or_id.split('?')[0]
         
-        # 方法 2: 如果是直接 ID (任何长度的字符串，移除特殊字符)
+        # 方法 1: /s/ 格式 (https://suno.com/s/xxxxx)
+        match = re.search(r'/s/([^\s/?&#]+)', url_or_id)
+        if match:
+            song_id = match.group(1)
+            self.append_status(f"✓ 从 /s/ 格式提取 ID: {song_id}")
+            return song_id
+        
+        # 方法 2: /song/ 格式 (https://suno.com/song/xxxxx)
+        match = re.search(r'song[/\-=]([^\s/?&#]+)', url_or_id)
+        if match:
+            song_id = match.group(1)
+            self.append_status(f"✓ 从 /song/ 格式提取 ID: {song_id}")
+            return song_id
+        
+        # 方法 3: /c/ 格式 (https://suno.com/c/xxxxx)
+        match = re.search(r'/c/([^\s/?&#]+)', url_or_id)
+        if match:
+            song_id = match.group(1)
+            self.append_status(f"✓ 从 /c/ 格式提取 ID: {song_id}")
+            return song_id
+        
+        # 方法 4: 直接 ID (任何长度的字符串)
         clean_id = re.sub(r'[^a-zA-Z0-9\-_]', '', url_or_id)
-        if len(clean_id) > 3:  # ID 至少要有几个字符
+        if len(clean_id) >= 10:  # ID 足够长
             self.append_status(f"✓ 识别为直接 ID: {clean_id}")
             return clean_id
         
@@ -291,7 +299,7 @@ class SunoDownloader:
             # 获取歌曲信息
             song_info = self.get_song_info(song_id)
             if not song_info:
-                raise Exception("无法获取歌曲信息。\n\n可能原因：\n1. 歌曲 ID 不正确\n2. 歌曲已删除\n3. 网络连接问题\n\n请检查 ID 是否正确。")
+                raise Exception("无法获取歌曲信息。\n\n可能原因：\n1. 歌曲 ID 不正确\n2. 歌曲已删除或私密\n3. 网络连接问题\n\n请检查：\n- 链接是否正确\n- 歌曲是否公开\n- 网络是否正常")
 
             title = song_info.get('title', f'suno_{song_id}')
             # 清理文件名中的非法字符
@@ -303,20 +311,25 @@ class SunoDownloader:
 
             self.append_status(f"🎵 歌曲: {title}")
             self.append_status(f"👤 艺术家: {artist}")
+            
+            if not audio_url:
+                self.append_status("⚠️ 警告: 未找到音频链接，尝试备用方案...")
+                audio_url = self.get_audio_url_fallback(song_id)
+            
             self.progress["value"] = 30
             self.percent_label.config(text="30%")
 
             download_format = self.download_format_var.get()
 
             # 下载 MP3
-            if 'MP3' in download_format or '完整' in download_format:
+            if 'MP3' in download_format or '��整' in download_format:
                 self.append_status("⬇️ 下载音频文件...")
                 if audio_url:
                     mp3_path = os.path.join(output_dir, f"{title}.mp3")
                     self.download_file(audio_url, mp3_path)
                     self.append_status(f"✓ MP3 已保存: {mp3_path}")
                 else:
-                    self.append_status("⚠️ 无可用音频链接")
+                    raise Exception("无可用音频链接")
 
             self.progress["value"] = 60
             self.percent_label.config(text="60%")
@@ -384,137 +397,131 @@ class SunoDownloader:
             self.is_downloading = False
 
     def get_song_info(self, song_id):
-        """获取歌曲信息 - 改进版本"""
+        """获取歌曲信息"""
         try:
             headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                 'Referer': 'https://suno.com/',
+                'Accept': 'application/json',
             }
             
-            # 尝试多个 URL 格式
-            urls_to_try = [
-                f"https://suno.com/song/{song_id}",
-                f"https://suno.com/c/{song_id}",
-                f"https://suno.com/api/songs/{song_id}",
+            # API 方法：直接调用 Suno API
+            self.append_status(f"🔗 尝试通过 API 获取信息...")
+            
+            api_urls = [
+                f"https://api.suno.ai/songs/{song_id}",
+                f"https://suno.com/api/v1/songs/{song_id}",
             ]
             
-            for url in urls_to_try:
+            for api_url in api_urls:
                 try:
-                    self.append_status(f"🔗 尝试访问: {url}")
+                    response = requests.get(api_url, headers=headers, timeout=10)
+                    if response.status_code == 200:
+                        try:
+                            data = response.json()
+                            self.append_status(f"✓ 成功获取 API 数据")
+                            return self.parse_api_response(data, song_id)
+                        except:
+                            pass
+                except:
+                    pass
+            
+            # 网页方法：爬取 HTML 页面
+            self.append_status(f"🔗 尝试通过网页爬取...")
+            
+            urls = [
+                f"https://suno.com/s/{song_id}",
+                f"https://suno.com/song/{song_id}",
+            ]
+            
+            for url in urls:
+                try:
+                    self.append_status(f"📄 访问: {url}")
                     response = requests.get(url, headers=headers, timeout=10)
                     
                     if response.status_code == 200:
-                        self.append_status(f"✓ 成功连接到页面")
+                        self.append_status(f"✓ 页面加载成功，正在解析...")
                         
-                        # 尝试从 JSON API 响应解析
-                        try:
-                            data = response.json()
-                            if 'title' in data:
-                                return {
-                                    'id': song_id,
-                                    'title': data.get('title', 'Unknown'),
-                                    'artist': data.get('display_name', 'Suno AI'),
-                                    'lyrics': data.get('prompt', data.get('lyrics', '')),
-                                    'audio_url': data.get('audio_url', ''),
-                                    'full_data': data
-                                }
-                        except:
-                            pass
-                        
-                        # 尝试从 HTML 页面解析
                         soup = BeautifulSoup(response.content, 'html.parser')
                         
-                        # 查找所有脚本标签
+                        # 查找所有脚本标签中的 JSON 数据
                         scripts = soup.find_all('script')
                         for script in scripts:
-                            if script.string:
-                                script_content = script.string
-                                
-                                # 查找 JSON 数据
-                                if '__INITIAL_STATE__' in script_content or 'initialState' in script_content:
-                                    try:
-                                        # 提取 JSON
-                                        start = script_content.find('{')
-                                        end = script_content.rfind('}') + 1
-                                        if start >= 0 and end > start:
-                                            json_str = script_content[start:end]
+                            if script.string and 'clip' in script.string.lower():
+                                try:
+                                    # 提取所有 JSON 块
+                                    matches = re.findall(r'\{[^{}]*"audio_url"[^{}]*\}', script.string)
+                                    for json_str in matches:
+                                        try:
                                             data = json.loads(json_str)
-                                            
-                                            # 递归搜索数据
-                                            song_info = self.extract_song_data(data, song_id)
-                                            if song_info:
+                                            song_info = self.parse_api_response(data, song_id)
+                                            if song_info.get('audio_url'):
                                                 return song_info
-                                    except:
-                                        pass
+                                        except:
+                                            pass
+                                except:
+                                    pass
                         
-                        # 备用方案: 从页面元素提取
-                        song_info = self.extract_from_html(soup, song_id)
-                        if song_info:
-                            return song_info
-                            
+                        # 尝试查找 audio 标签
+                        audio_tag = soup.find('audio')
+                        if audio_tag:
+                            source_tag = audio_tag.find('source')
+                            if source_tag and source_tag.get('src'):
+                                self.append_status(f"✓ 从 HTML 提取音频链接")
+                                return {
+                                    'id': song_id,
+                                    'title': soup.title.string.split('|')[0].strip() if soup.title else 'Unknown',
+                                    'artist': 'Suno AI',
+                                    'lyrics': '',
+                                    'audio_url': source_tag['src'],
+                                }
+                
                 except Exception as e:
-                    self.append_status(f"⚠️ 访问 {url} 失败: {str(e)[:50]}")
-                    continue
+                    self.append_status(f"⚠️ 访问失败: {str(e)[:50]}")
             
-            # 如果所有方法都失败，返回基础信息
-            self.append_status("⚠️ 无法获取详细信息，使用基础数据")
-            return {
-                'id': song_id,
-                'title': f'suno_{song_id[:8]}',
-                'artist': 'Suno AI',
-                'lyrics': '',
-                'audio_url': f'https://suno.com/api/download/{song_id}',
-            }
+            return None
                 
         except Exception as e:
             self.append_status(f"❌ 获取信息异常: {str(e)[:100]}")
             return None
 
-    def extract_song_data(self, data, song_id):
-        """递归提取歌曲数据"""
+    def parse_api_response(self, data, song_id):
+        """解析 API 响应"""
         if isinstance(data, dict):
-            if 'title' in data and 'audio_url' in data:
-                return {
-                    'id': song_id,
-                    'title': data.get('title', 'Unknown'),
-                    'artist': data.get('display_name', data.get('artist', 'Suno AI')),
-                    'lyrics': data.get('lyrics', data.get('prompt', '')),
-                    'audio_url': data.get('audio_url', ''),
-                }
-            
-            for value in data.values():
-                result = self.extract_song_data(value, song_id)
-                if result:
-                    return result
-        
-        elif isinstance(data, list):
-            for item in data:
-                result = self.extract_song_data(item, song_id)
-                if result:
-                    return result
-        
-        return None
-
-    def extract_from_html(self, soup, song_id):
-        """从 HTML 页面直接提取信息"""
-        try:
-            # 查找标题
-            title_tag = soup.find('h1') or soup.find('title')
-            title = title_tag.text.strip() if title_tag else f'suno_{song_id[:8]}'
-            
-            # 查找音频链接
-            audio_tag = soup.find('audio')
-            audio_url = audio_tag.find('source')['src'] if audio_tag else ''
-            
             return {
                 'id': song_id,
-                'title': title,
-                'artist': 'Suno AI',
-                'lyrics': '',
-                'audio_url': audio_url,
+                'title': data.get('title', data.get('name', 'Unknown')).replace('/', '_'),
+                'artist': data.get('user', {}).get('name', data.get('display_name', 'Suno AI')),
+                'lyrics': data.get('lyrics', data.get('prompt', data.get('metadata', {}).get('gpt_description', ''))),
+                'audio_url': data.get('audio_url', data.get('download_url', '')),
             }
+        return None
+
+    def get_audio_url_fallback(self, song_id):
+        """备用方法获取音频 URL"""
+        try:
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            }
+            
+            # 尝试直接下载 URL
+            fallback_urls = [
+                f"https://cdn1.suno.ai/{song_id}.mp3",
+                f"https://suno-prod-us-west-2-public.s3.amazonaws.com/{song_id}.mp3",
+            ]
+            
+            for url in fallback_urls:
+                try:
+                    response = requests.head(url, headers=headers, timeout=5)
+                    if response.status_code == 200:
+                        self.append_status(f"✓ 找到备用音频链接")
+                        return url
+                except:
+                    pass
         except:
-            return None
+            pass
+        
+        return ""
 
     def download_file(self, url, filepath):
         """下载文件"""
@@ -527,7 +534,7 @@ class SunoDownloader:
                 'Referer': 'https://suno.com/',
             }
             
-            self.append_status(f"⬇️ 从 {url[:60]}... 下载")
+            self.append_status(f"⬇️ 开始下载音频...")
             response = requests.get(url, headers=headers, stream=True, timeout=30)
             response.raise_for_status()
             
